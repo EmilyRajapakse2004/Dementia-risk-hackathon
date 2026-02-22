@@ -1,62 +1,39 @@
 import streamlit as st
-import pandas as pd
-import joblib
+from modules.data_cleaning import load_and_clean_data
+from modules.preprocessing import preprocess_features
+from modules.model import train_model, evaluate_model, save_model
+from modules.new_prediction import predict_new_patient
 
-# Load trained model
-model = joblib.load("../data/processed/dementia_risk_model.pkl")
+# Load dataset
+df = load_and_clean_data("data/dementia_data.csv")
+target_col = "dementia"
 
-st.set_page_config(page_title="Dementia Risk Predictor", layout="centered")
+# Preprocessing
+X_train_scaled, X_test_scaled, y_train, y_test, scaler, columns = preprocess_features(df, target_col)
 
-st.title("🧠 Dementia Risk Prediction")
-st.write("Enter patient details to assess dementia risk.")
+# Train model
+model = train_model(X_train_scaled, y_train)
+evaluate_model(model, X_test_scaled, y_test)
+save_model(model, scaler, columns)
 
-st.divider()
+st.title("Dementia Risk Prediction Hackathon App")
 
-# ---- User Inputs ----
-age = st.number_input("Age", min_value=40, max_value=120, value=65)
+st.subheader("Enter patient details")
 
-education_years = st.number_input(
-    "Years of Education", min_value=0, max_value=25, value=12
-)
-
-gender = st.selectbox("Gender", ["Male", "Female"])
-
-marital_status = st.selectbox(
-    "Marital Status", ["Married", "Single", "Divorced", "Widowed"]
-)
-
-# ---- Encoding (MUST match training) ----
-gender_encoded = 1 if gender == "Male" else 0
-
-marital_map = {
-    "Married": 0,
-    "Single": 1,
-    "Divorced": 2,
-    "Widowed": 3
+patient = {
+    "age": st.number_input("Age", 50, 100, 70),
+    "education_years": st.number_input("Years of Education", 0, 20, 12),
+    "sex": st.selectbox("Sex", ["M", "F"]),
+    "marital_status": st.selectbox("Marital Status", ["Married", "Single", "Widowed", "Divorced"]),
+    "social_activity": st.number_input("Social Activity (1-6)", 1, 6, 3),
+    "exercise_hours": st.number_input("Weekly Exercise Hours", 0, 10, 3),
+    "smoking_status": st.selectbox("Smoking (0=No,1=Yes)", [0,1]),
+    "alcohol_units": st.number_input("Weekly Alcohol Units", 0, 20, 1)
 }
 
-marital_encoded = marital_map[marital_status]
-
-# ---- Create Input DataFrame ----
-input_data = pd.DataFrame([{
-    "age": age,
-    "education_years": education_years,
-    "gender": gender_encoded,
-    "marital_status": marital_encoded
-}])
-
-st.divider()
-
-# ---- Prediction ----
-if st.button("🔍 Predict Dementia Risk"):
-    probability = model.predict_proba(input_data)[0][1]
-    risk_percent = probability * 100
-
-    st.subheader("Prediction Result")
-
-    if risk_percent >= 50:
-        st.error(f"⚠️ High Dementia Risk: {risk_percent:.2f}%")
+if st.button("Predict Risk"):
+    result = predict_new_patient(patient)
+    if result == 1:
+        st.error("Patient is at risk of dementia")
     else:
-        st.success(f"✅ Low Dementia Risk: {risk_percent:.2f}%")
-
-    st.caption("This is a probabilistic prediction, not a medical diagnosis.")
+        st.success("Patient is NOT at risk")
